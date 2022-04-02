@@ -6,9 +6,7 @@ import numpy as np
 #from tensorflow import keras
 from imantics import Mask
 import rospy
-from thesis.msg import ObjectArray, LabeledPolygon, CloudArray, LabeledCloud
 from sensor_msgs.msg import CameraInfo, Image
-from geometry_msgs.msg import Point32, Polygon, Twist
 from rospy.numpy_msg import numpy_msg
 import rospkg
 from dynamic_reconfigure import client
@@ -32,18 +30,21 @@ use_gpu = True
 SUBSCRIBING_TOPIC_NAME = 'camera/rgb/image_raw'
 SUBSCRIBING_TOPIC_INFO = 'camera/rgb/camera_info'
 
+#SUBSCRIBING_TOPIC_NAME = '/image_publisher_1648910127171650689/image_raw'
+#SUBSCRIBING_TOPIC_INFO = '/image_publisher_1648910127171650689/camera_info'
+
 PUBLISHING_TOPIC_NAME = 'pred_depth'
 
 
 class Depth_Prediction_Service:
 
-    def __init__(self, camera_info, mode='polygon'):
+    def __init__(self, camera_info):
         # comment this line what is running on cpu/gpu
         # tf.debugging.set_log_device_placement(True)
         self.camera_info = camera_info
-        self.mode = mode
+
         rospack = rospkg.RosPack()
-        base_path = rospack.get_path("thesis")
+        base_path = rospack.get_path("depth_prediction")
 
         self.model_depth = {}
         self.device = torch.device("cuda:0" if use_gpu and torch.cuda.is_available() else "cpu")
@@ -70,7 +71,7 @@ class Depth_Prediction_Service:
 
         print('model_loaded')
 
-        self.publisher = rospy.Publisher(PUBLISHING_TOPIC_NAME, Image, queue_size=500)
+        self.publisher = rospy.Publisher(PUBLISHING_TOPIC_NAME, Image, queue_size=1)
 
 
 
@@ -102,9 +103,6 @@ class Depth_Prediction_Service:
 
         output = self.predict(img_array)
 
-        #msg = Twist()
-        #msg.linear.x = 0.2
-        #msg.angular.z = output[0][1]
         np_arr = output[0].cpu().detach().numpy()
         np_arr = 255 * np_arr * 6 # Multiplied by 6 for better visualization. But yields to bitoverflow
         np_arr = np_arr.astype(np.uint8)
@@ -134,7 +132,7 @@ def depth_prediction():
 
     rospy.loginfo('Start prediction Depth from RGB Image')
     depth_node = Depth_Prediction_Service(camera_info=camera_info)
-    rospy.Subscriber(SUBSCRIBING_TOPIC_NAME, numpy_msg(Image), depth_node.depth_predict)
+    rospy.Subscriber(SUBSCRIBING_TOPIC_NAME, numpy_msg(Image), depth_node.depth_predict,queue_size=1)
 
     rospy.spin()
 
